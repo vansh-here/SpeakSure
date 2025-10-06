@@ -223,3 +223,4 @@ The SpeakSure Flutter app has been successfully updated to integrate with the ac
 
 The updated architecture follows the backend's conversation-based approach and provides a seamless user experience for interview practice and performance tracking.
 
+

@@ -56,7 +56,7 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
   int _noInputCountdown = 0;
   
   // Avatar emotion
-  AvatarEmotion _currentEmotion = AvatarEmotion.neutral;
+  AvatarEmotion _currentEmotion = AvatarEmotion.happy;
 
   @override
   void initState() {
@@ -99,7 +99,7 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
     _flutterTts.setCompletionHandler(() {
       setState(() {
         _isPlayingQuestion = false;
-        _currentEmotion = AvatarEmotion.neutral;
+        _currentEmotion = AvatarEmotion.happy;
         _currentWordIndex = 0;
       });
       // Start listening after question completes
