@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/di/providers.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path/path.dart' as p;
 
 class LandingPage extends ConsumerStatefulWidget {
   const LandingPage({super.key});
@@ -18,13 +20,24 @@ class LandingPage extends ConsumerStatefulWidget {
 
 class _LandingPageState extends ConsumerState<LandingPage>
     with TickerProviderStateMixin {
+  static const Color _accentBlue = Color(0xFF87CEFA);
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _ageController = TextEditingController();
   final _goalController = TextEditingController();
 
+  final List<String> _mbaGoals = const [
+    'Management Consulting',
+    'Product Management',
+    'Investment Banking',
+    'Entrepreneurship / Start-up Leadership',
+    'Other (specify)',
+  ];
+  String? _selectedGoal;
+
   String? _resumePath;
   File? _resumeFile;
+  Uint8List? _resumeBytes;
   bool _isLoading = false;
 
   late AnimationController _animationController;
@@ -53,6 +66,56 @@ class _LandingPageState extends ConsumerState<LandingPage>
     _animationController.forward();
   }
 
+  Widget _buildGoalSelector() {
+    return DropdownButtonFormField<String>(
+      value: _selectedGoal,
+      items: _mbaGoals
+          .map(
+            (goal) => DropdownMenuItem<String>(
+              value: goal,
+              child: Text(
+                goal,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: (value) {
+        setState(() {
+          _selectedGoal = value;
+          if (value != null && value != 'Other (specify)') {
+            _goalController.text = value;
+          } else {
+            _goalController.clear();
+          }
+        });
+      },
+      dropdownColor: const Color(0xFF374151),
+      iconEnabledColor: Colors.grey[400],
+      decoration: InputDecoration(
+        labelText: 'Career Goal',
+        labelStyle: TextStyle(color: Colors.grey[400]),
+        prefixIcon: Icon(Icons.work, color: Colors.grey[400]),
+        filled: true,
+        fillColor: const Color(0xFF374151),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: _accentBlue, width: 2),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+      style: const TextStyle(color: Colors.white),
+      hint: Text(
+        'Select your MBA career goal',
+        style: TextStyle(color: Colors.grey[400]),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -68,15 +131,19 @@ class _LandingPageState extends ConsumerState<LandingPage>
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'doc', 'docx'],
+        withData: kIsWeb,
       );
 
       if (result != null) {
         setState(() {
           if (kIsWeb) {
             _resumePath = result.files.single.name;
+            _resumeBytes = result.files.single.bytes;
+            _resumeFile = null;
           } else {
             _resumePath = result.files.single.path;
             _resumeFile = File(result.files.single.path!);
+            _resumeBytes = null;
           }
         });
       }
@@ -112,11 +179,16 @@ class _LandingPageState extends ConsumerState<LandingPage>
       );
       
       // Then upload resume if provided (this stores resume in RAM after user creation)
-      if (_resumeFile != null) {
+      if (_resumeFile != null || _resumeBytes != null) {
+        final rawPath = _resumePath ?? _resumeFile?.path;
+        final normalizedName = rawPath != null ? p.basename(rawPath) : 'resume.pdf';
+        final extension = rawPath != null ? p.extension(rawPath).replaceFirst('.', '') : 'pdf';
+
         await authService.uploadResume(
-          filePath: _resumeFile!.path,
-          fileName: _resumePath!.split('/').last,
-          fileType: _resumePath!.split('.').last,
+          filePath: _resumeFile?.path,
+          fileBytes: _resumeBytes,
+          fileName: normalizedName,
+          fileType: extension.isNotEmpty ? extension : 'pdf',
         );
       }
 
@@ -219,13 +291,17 @@ class _LandingPageState extends ConsumerState<LandingPage>
           keyboardType: TextInputType.number,
         ),
         const SizedBox(height: 20),
-        _buildTextField(
-          _goalController,
-          'Career Goal',
-          Icons.work,
-          textColor: Colors.white,
-          maxLines: 2,
-        ),
+        _buildGoalSelector(),
+        if (_selectedGoal == 'Other (specify)') ...[
+          const SizedBox(height: 20),
+          _buildTextField(
+            _goalController,
+            'Describe your career goal',
+            Icons.edit,
+            textColor: Colors.white,
+            maxLines: 2,
+          ),
+        ],
         const SizedBox(height: 30),
         
         // Resume upload
@@ -239,7 +315,7 @@ class _LandingPageState extends ConsumerState<LandingPage>
           child: ElevatedButton(
             onPressed: _isLoading ? null : _submitForm,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6366F1), // Purple color
+              backgroundColor: _accentBlue,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -259,7 +335,8 @@ class _LandingPageState extends ConsumerState<LandingPage>
                     'Submit',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      color:  Color(0xFF374151),
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
           ),
@@ -296,7 +373,7 @@ class _LandingPageState extends ConsumerState<LandingPage>
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 2),
+          borderSide: const BorderSide(color: _accentBlue, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
@@ -312,7 +389,7 @@ class _LandingPageState extends ConsumerState<LandingPage>
           borderRadius: BorderRadius.circular(12),
           color: const Color(0xFF374151), // Darker gray
           border: _resumePath != null
-              ? Border.all(color: const Color(0xFF10B981), width: 2) // Green border when uploaded
+              ? Border.all(color: _accentBlue, width: 2)
               : null,
         ),
         child: Row(

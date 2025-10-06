@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../network/api_client.dart';
@@ -35,13 +36,25 @@ class AuthService {
 
   /// Upload resume (POST /upload_resume)
   Future<UploadResumeResponse> uploadResume({
-    required String filePath,
+    String? filePath,
+    Uint8List? fileBytes,
     required String fileName,
     required String fileType,
   }) async {
-    final file = File(filePath);
+    MultipartFile fileMultipart;
+
+    if (fileBytes != null) {
+      fileMultipart = MultipartFile.fromBytes(fileBytes, filename: fileName);
+    } else if (filePath != null) {
+      final file = File(filePath);
+      fileMultipart = await MultipartFile.fromFile(file.path, filename: fileName);
+    } else {
+      throw ArgumentError('Either filePath or fileBytes must be provided for resume upload');
+    }
+
     final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(file.path, filename: fileName),
+      'file': fileMultipart,
+      'file_type': fileType,
     });
 
     final response = await _api.handleApiCall(

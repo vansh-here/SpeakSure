@@ -397,17 +397,22 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
     try {
       // For web, use transcribed text directly
       print('Web: Using transcribed text: $_transcribedText');
-      if (_transcribedText.isNotEmpty && 
-          !_transcribedText.contains('Listening') && 
+      final hasValidInput = _transcribedText.isNotEmpty &&
+          !_transcribedText.contains('Listening') &&
           !_transcribedText.contains('Error') &&
-          !_transcribedText.contains('Click')) {
+          !_transcribedText.contains('Click');
+
+      if (hasValidInput) {
         await _submitAnswerToBackend();
       } else {
-        setState(() {
-          _isProcessing = false;
-          _currentEmotion = AvatarEmotion.neutral;
-          _transcribedText = 'Please speak your answer and try again';
-        });
+        await _submitAnswerToBackend(
+          answerOverride: 'No response provided.',
+        );
+        if (mounted) {
+          setState(() {
+            _transcribedText = 'No input detected. Moving to the next question.';
+          });
+        }
       }
       
     } catch (e) {
@@ -420,7 +425,7 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
     }
   }
 
-  Future<void> _submitAnswerToBackend() async {
+  Future<void> _submitAnswerToBackend({String? answerOverride}) async {
     if (_conversationId == null) return;
     
     try {
@@ -434,10 +439,15 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
       print('=== SUBMITTING ANSWER TO BACKEND ===');
       print('Current conversation ID: $_conversationId');
       print('Current question index: $_currentQuestionIndex');
-      print('Transcribed text: $_transcribedText');
+      var answerText = (answerOverride ?? _transcribedText).trim();
+      if (answerText.isEmpty) {
+        answerText = 'No response provided.';
+      }
+      print('Transcribed text: $answerText');
+      print('Answer override used: ${answerOverride != null}');
       
       // Submit the transcribed text as answer
-      final response = await interviewService.provideTextAnswer(_conversationId!, _transcribedText);
+      final response = await interviewService.provideTextAnswer(_conversationId!, answerText);
       
       print('=== RESPONSE ANALYSIS ===');
       print('Response message: ${response.message}');
