@@ -6,12 +6,6 @@ import '../services/auth_service.dart';
 import '../services/interview_service.dart';
 import '../services/report_service.dart';
 import '../services/question_service.dart';
-import '../../data/repositories/user_repository_impl.dart';
-import '../../data/repositories/interview_repository_impl.dart';
-import '../../data/repositories/report_repository_impl.dart';
-import '../../domain/repositories/user_repository.dart';
-import '../../domain/repositories/interview_repository.dart';
-import '../../domain/repositories/report_repository.dart';
 
 final appConfigProvider = Provider<AppConfig>((ref) {
   return AppConfig.fromEnv();
@@ -49,21 +43,21 @@ final questionServiceProvider = FutureProvider<QuestionService>((ref) async {
   return QuestionService(apiClient);
 });
 
-// Repository Providers
-final userRepositoryProvider = FutureProvider<UserRepository>((ref) async {
-  final api = await ref.watch(apiClientProvider.future);
-  return UserRepositoryImpl(apiClient: api);
-});
+// Repository Providers - Temporarily disabled as repositories are not implemented
+// final userRepositoryProvider = FutureProvider<UserRepository>((ref) async {
+//   final api = await ref.watch(apiClientProvider.future);
+//   return UserRepositoryImpl(apiClient: api);
+// });
 
-final interviewRepositoryProvider = FutureProvider<InterviewRepository>((ref) async {
-  final api = await ref.watch(apiClientProvider.future);
-  return InterviewRepositoryImpl(apiClient: api);
-});
+// final interviewRepositoryProvider = FutureProvider<InterviewRepository>((ref) async {
+//   final api = await ref.watch(apiClientProvider.future);
+//   return InterviewRepositoryImpl(apiClient: api);
+// });
 
-final reportRepositoryProvider = FutureProvider<ReportRepository>((ref) async {
-  final api = await ref.watch(apiClientProvider.future);
-  return ReportRepositoryImpl(apiClient: api);
-});
+// final reportRepositoryProvider = FutureProvider<ReportRepository>((ref) async {
+//   final api = await ref.watch(apiClientProvider.future);
+//   return ReportRepositoryImpl(apiClient: api);
+// });
 
 
 

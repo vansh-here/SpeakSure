@@ -101,11 +101,31 @@ class ProvideAnswerResponse {
     this.feedback,
   });
 
+  // Getter to access the question (whether it's in nextQuestion or question field)
+  String? get question {
+    return nextQuestion;
+  }
+
   factory ProvideAnswerResponse.fromJson(Map<String, dynamic> json) {
+    // Handle different field names that backend might use
+    String? nextQuestion = json['next_question'] as String?;
+    if (nextQuestion == null || nextQuestion.isEmpty) {
+      nextQuestion = json['nextQuestion'] as String?;
+    }
+    if (nextQuestion == null || nextQuestion.isEmpty) {
+      nextQuestion = json['question'] as String?; // Backend returns 'question' field
+    }
+
+    // Handle interview completion case
+    bool isComplete = json['is_complete'] as bool? ?? json['isComplete'] as bool? ?? false;
+    if (nextQuestion == "The interview is over." || json['status'] == "finished") {
+      isComplete = true;
+    }
+
     return ProvideAnswerResponse(
-      nextQuestion: json['next_question'] as String? ?? json['nextQuestion'] as String?,
-      isComplete: json['is_complete'] as bool? ?? json['isComplete'] as bool? ?? false,
-      message: json['message'] as String? ?? '',
+      nextQuestion: nextQuestion,
+      isComplete: isComplete,
+      message: json['message'] as String? ?? json['status'] as String? ?? '',
       feedback: json['feedback'] as Map<String, dynamic>?,
     );
   }

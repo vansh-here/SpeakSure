@@ -181,9 +181,9 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
     print('=== PLAYING QUESTION WITH HIGHLIGHTING ===');
     print('Question to play: $_currentQuestion');
 
-    // Try to play audio from backend first
+    // Try to play audio from backend first for all questions
     bool audioPlayed = await _tryPlayBackendAudio();
-    
+
     if (!audioPlayed) {
       print('Backend audio failed or unavailable, using TTS for: $_currentQuestion');
       // Fallback to TTS with word highlighting
@@ -195,45 +195,39 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
 
   Future<bool> _tryPlayBackendAudio() async {
     if (_conversationId == null) return false;
-    
-    // TEMPORARY FIX: Only use backend audio for first question
-    // Backend audio state is not updating for subsequent questions
-    if (_currentQuestionIndex > 1) {
-      print('=== SKIPPING BACKEND AUDIO ===');
-      print('Backend audio is stuck on first question, using TTS instead');
-      print('Question index: $_currentQuestionIndex');
-      return false; // This will trigger TTS fallback
-    }
-    
+
     try {
       final interviewService = await ref.read(interviewServiceProvider.future);
-      
-      print('=== USING BACKEND AUDIO FOR FIRST QUESTION ===');
+
+      print('=== FETCHING AUDIO FOR QUESTION ===');
       print('Conversation ID: $_conversationId');
-      print('Current question on screen: $_currentQuestion');
-      
-      // Get the audio for the first question only
-      print('Fetching audio for first question: $_currentQuestion');
+      print('Current question: $_currentQuestion');
+      print('Question index: $_currentQuestionIndex');
+
+      // Give backend a moment to ensure audio is ready
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Get the audio for the current question
       final audioBytes = await interviewService.getAudio(_conversationId!);
-      
+
       if (audioBytes != null && audioBytes.isNotEmpty) {
         print('Audio received: ${audioBytes.length} bytes');
-        print('Playing backend audio for first question: $_currentQuestion');
-        
+        print('Playing backend audio for question $_currentQuestionIndex: $_currentQuestion');
+
         // Start word highlighting while playing audio
         _startWordHighlighting();
-        
+
         // For web, play audio from bytes directly
         await _audioPlayer.play(BytesSource(Uint8List.fromList(audioBytes)));
         return true;
       } else {
         print('No audio bytes received from backend');
+        return false;
       }
     } catch (e) {
       print('Error playing backend audio: $e');
+      return false;
     }
-    
-    return false;
   }
 
   Future<void> _playQuestionWithTTS() async {
@@ -459,111 +453,120 @@ class _WebInterviewPageState extends ConsumerState<WebInterviewPage>
         _currentQuestionIndex++;
       });
       
-      // CRITICAL: Only complete if backend explicitly says so AND we've had enough questions
-      final minQuestions = 5; // Minimum questions before allowing completion
-      
-      if (response.isComplete == true && _currentQuestionIndex >= minQuestions) {
+      // CRITICAL: Complete interview after exactly 5 questions
+      final maxQuestions = 5; // Maximum questions before interview completion
+
+      if (_currentQuestionIndex >= maxQuestions) {
+        print('=== INTERVIEW COMPLETE ===');
+        print('Reached maximum of $_currentQuestionIndex questions, ending interview');
+        _completeInterview();
+        return;
+      } else if (response.isComplete == true && _currentQuestionIndex >= 3) {
+        // Backend says complete and we've had at least 3 questions, respect it
         print('=== INTERVIEW COMPLETE ===');
         print('Backend marked interview as complete after $_currentQuestionIndex questions');
         _completeInterview();
         return;
-      } else if (response.isComplete == true && _currentQuestionIndex < minQuestions) {
-        print('=== BACKEND WANTS TO COMPLETE TOO EARLY ===');
-        print('Backend wants to complete after only $_currentQuestionIndex questions');
-        print('Forcing continuation to reach minimum of $minQuestions questions');
-        // Override backend decision and continue
       }
-      
-      // Continue with next question (either from backend response or fallback)
+
+      // Get next question from backend response
       String nextQuestion;
-      
+
+      print('=== DEBUGGING BACKEND RESPONSE ===');
+      print('Full response object: $response');
+      print('Response runtime type: ${response.runtimeType}');
+      print('Response nextQuestion: ${response.nextQuestion}');
+      print('Response question: ${response.question}');
+      print('Response message: ${response.message}');
+      print('Response isComplete: ${response.isComplete}');
+
       if (response.nextQuestion != null && response.nextQuestion!.isNotEmpty) {
         nextQuestion = response.nextQuestion!;
         print('=== USING BACKEND NEXT QUESTION ===');
+        print('Next question from backend: $nextQuestion');
       } else {
-        // Get the next question from backend to ensure sync
-        final backendQuestion = await interviewService.getCurrentQuestion(_conversationId!);
-        if (backendQuestion != null && backendQuestion.isNotEmpty) {
-          nextQuestion = backendQuestion;
-          print('=== USING BACKEND CURRENT QUESTION ===');
-        } else {
-          // Generate a fallback question if backend doesn't provide one
+        // Fallback if backend doesn't provide next question
+        print('=== BACKEND DID NOT PROVIDE NEXT QUESTION ===');
+        print('Response nextQuestion: ${response.nextQuestion}');
+
+        // Try to get current question from backend
+        try {
+          final backendQuestion = await interviewService.getCurrentQuestion(_conversationId!);
+          if (backendQuestion != null && backendQuestion.isNotEmpty) {
+            nextQuestion = backendQuestion;
+            print('=== USING BACKEND CURRENT QUESTION AS FALLBACK ===');
+          } else {
+            // Last resort fallback questions
+            final fallbackQuestions = [
+              'Tell me about a challenging project you worked on recently.',
+              'Describe a time when you had to work with a difficult team member.',
+              'What are your career goals for the next 5 years?',
+              'How do you handle stress and pressure in the workplace?',
+              'What motivates you in your work?'
+            ];
+
+            final questionIndex = (_currentQuestionIndex - 1) % fallbackQuestions.length;
+            nextQuestion = fallbackQuestions[questionIndex];
+            print('=== USING FALLBACK QUESTION ===');
+          }
+        } catch (e) {
+          print('Error getting backend question: $e');
+          // Use fallback questions
           final fallbackQuestions = [
             'Tell me about a challenging project you worked on recently.',
             'Describe a time when you had to work with a difficult team member.',
             'What are your career goals for the next 5 years?',
             'How do you handle stress and pressure in the workplace?',
-            'What motivates you in your work?',
-            'Describe your ideal work environment.',
-            'How do you stay updated with industry trends?',
-            'Tell me about a time you had to learn something new quickly.',
-            'What are your strengths and weaknesses?',
-            'Do you have any questions for us?'
+            'What motivates you in your work?'
           ];
-          
+
           final questionIndex = (_currentQuestionIndex - 1) % fallbackQuestions.length;
           nextQuestion = fallbackQuestions[questionIndex];
-          print('=== USING FALLBACK QUESTION ===');
-          print('Question index: $questionIndex');
+          print('=== USING FALLBACK QUESTION AFTER ERROR ===');
         }
       }
-      
+
       print('=== CONTINUING INTERVIEW ===');
       print('Setting next question: $nextQuestion');
       print('Current question count: $_currentQuestionIndex');
-      
+
       setState(() {
         _currentQuestion = nextQuestion;
         _questionWords = _currentQuestion.split(' ');
         _currentEmotion = AvatarEmotion.satisfied;
         _transcribedText = '';
       });
-      
+
       print('Question updated in state');
       print('New current question: $_currentQuestion');
-      
-      // Only complete if we've reached the maximum questions (safety net)
-      if (_currentQuestionIndex >= 10) {
+
+      // Check completion BEFORE playing the question
+      if (_currentQuestionIndex >= 5) {
         print('=== REACHED MAXIMUM QUESTIONS ===');
         print('Completed $_currentQuestionIndex questions, ending interview');
         await Future.delayed(const Duration(seconds: 2));
         _completeInterview();
         return;
       }
-      
-      // Wait a bit longer to ensure backend has updated its state
-      // This ensures the audio we fetch matches the question we just set
-      await Future.delayed(const Duration(seconds: 2));
-      
-      print('=== ABOUT TO PLAY NEXT QUESTION ===');
-      print('Question to play: $_currentQuestion');
-      
-      // CRITICAL: Ensure backend knows about the current question before getting audio
-      // The issue is that backend audio endpoint might not be synced with the new question
-      try {
-        // First, verify what question the backend thinks is current
-        final backendCurrentQuestion = await interviewService.getCurrentQuestion(_conversationId!);
-        print('=== BACKEND QUESTION CHECK ===');
-        print('UI Question: $_currentQuestion');
-        print('Backend Question: $backendCurrentQuestion');
-        
-        if (backendCurrentQuestion != null && backendCurrentQuestion != _currentQuestion) {
-          print('=== BACKEND OUT OF SYNC ===');
-          print('Backend has different question than UI');
-          print('This explains why audio is wrong!');
-          
-          // Update UI to match backend (backend is the source of truth for audio)
-          setState(() {
-            _currentQuestion = backendCurrentQuestion;
-            _questionWords = _currentQuestion.split(' ');
-          });
-          
-          print('Updated UI to match backend: $backendCurrentQuestion');
-        }
-      } catch (e) {
-        print('Error checking backend question: $e');
+
+      // Check if backend says interview is complete
+      if (response.isComplete == true) {
+        print('=== INTERVIEW COMPLETE FROM BACKEND ===');
+        print('Backend marked interview as complete');
+        _completeInterview();
+        return;
       }
-      
+
+      // Wait for backend to process the answer and generate next question/audio
+      print('=== WAITING FOR BACKEND PROCESSING ===');
+      print('Giving backend time to process answer and generate next question...');
+
+      // Wait for backend processing - this is crucial for audio sync
+      await Future.delayed(const Duration(seconds: 3));
+
+      print('=== BACKEND PROCESSING COMPLETE ===');
+      print('Now fetching next question and audio...');
+
       _playQuestionWithHighlighting();
       
     } catch (e) {

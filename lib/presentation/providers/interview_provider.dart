@@ -106,8 +106,11 @@ class InterviewNotifier extends StateNotifier<InterviewState> {
         audioFile,
       );
 
-      if (response.isComplete) {
-        // Interview completed
+      // Check if we've reached the maximum questions (5 questions total)
+      final hasReachedMaxQuestions = state.currentQuestionIndex >= 4; // 0-indexed, so 4 means 5th question
+
+      if (response.isComplete || hasReachedMaxQuestions) {
+        // Interview completed - either backend said so or we've hit the 5 question limit
         await completeInterview();
       } else if (response.nextQuestion != null) {
         // Move to next question
@@ -117,7 +120,7 @@ class InterviewNotifier extends StateNotifier<InterviewState> {
           category: 'Interview',
           difficulty: 'Medium',
         );
-        
+
         state = state.copyWith(
           isLoading: false,
           currentQuestion: nextQuestion,
@@ -132,22 +135,38 @@ class InterviewNotifier extends StateNotifier<InterviewState> {
     }
   }
 
-  Future<void> completeInterview() async {
+  Future<void> submitTextAnswer(String textAnswer) async {
     if (state.currentInterview == null) return;
 
     state = state.copyWith(isLoading: true, error: null);
     try {
-      // Interview is completed when we get isComplete from provideAnswer
-      final completedInterview = state.currentInterview!.copyWith(
-        status: InterviewStatus.completed,
-        completedAt: DateTime.now(),
+      // Use the text answer method for web-based submissions
+      final response = await _interviewService.provideTextAnswer(
+        state.currentInterview!.id,
+        textAnswer,
       );
 
-      state = state.copyWith(
-        isLoading: false,
-        currentInterview: completedInterview,
-        currentQuestion: null,
-      );
+      // Check if we've reached the maximum questions (5 questions total)
+      final hasReachedMaxQuestions = state.currentQuestionIndex >= 4; // 0-indexed, so 4 means 5th question
+
+      if (response.isComplete || hasReachedMaxQuestions) {
+        // Interview completed - either backend said so or we've hit the 5 question limit
+        await completeInterview();
+      } else if (response.nextQuestion != null) {
+        // Move to next question
+        final nextQuestion = QuestionModel(
+          id: 'q${state.currentQuestionIndex + 2}',
+          text: response.nextQuestion!,
+          category: 'Interview',
+          difficulty: 'Medium',
+        );
+
+        state = state.copyWith(
+          isLoading: false,
+          currentQuestion: nextQuestion,
+          currentQuestionIndex: state.currentQuestionIndex + 1,
+        );
+      }
     } catch (e) {
       state = state.copyWith(
         isLoading: false,

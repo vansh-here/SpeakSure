@@ -40,7 +40,7 @@ class AppConstants {
   static const int maxFileSize = 5 * 1024 * 1024; // 5MB
 
   // Interview Settings
-  static const int maxQuestionsPerSession = 20;
+  static const int maxQuestionsPerSession = 5;
   static const int minQuestionsPerSession = 5;
   static const Duration questionTimeout = Duration(minutes: 3);
 }
